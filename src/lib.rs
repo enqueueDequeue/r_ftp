@@ -70,21 +70,6 @@ enum TransferType {
   Text
 }
 
-pub struct Connection {
-  id: u64,
-  ip: [u8; 4],
-  read_pos: usize,
-  // todo: use this variable in retr ?
-  transfer_type: TransferType,
-  username: String,
-  control_stream: TcpStream,
-  port: u16,
-  data_listener: Option<TcpListener>,
-  dir: String,
-  handlers: HashMap<MethodId, Box<dyn Handler + Send + Sync>>,
-  validator: fn(&str, &str) -> bool
-}
-
 #[async_trait::async_trait]
 pub trait Handler {
   async fn handle(&self, connection: &mut Connection, args: &[u8]) -> Result<(), Error>;
@@ -92,19 +77,19 @@ pub trait Handler {
 
 type MethodId = u64;
 
-struct CwdHandler;
-struct PwdHandler;
-struct RestHandler;
-struct SizeHandler;
-struct PasvHandler;
-struct EpsvHandler;
-struct UserHandler;
-struct PassHandler;
-struct RetrHandler;
-struct TypeHandler;
-struct QuitHandler;
-struct ListHandler;
-struct NlstHandler;
+pub struct CwdHandler;
+pub struct PwdHandler;
+pub struct RestHandler;
+pub struct SizeHandler;
+pub struct PasvHandler;
+pub struct EpsvHandler;
+pub struct UserHandler;
+pub struct PassHandler;
+pub struct RetrHandler;
+pub struct TypeHandler;
+pub struct QuitHandler;
+pub struct ListHandler;
+pub struct NlstHandler;
 
 #[async_trait::async_trait]
 impl Handler for CwdHandler {
@@ -210,6 +195,7 @@ impl Handler for PassHandler {
     match std::str::from_utf8(args) {
       Ok(val) => {
         if (connection.validator)(&connection.username, val) {
+          (connection.registerer)(connection);
           connection.send_control_raw(b"230 User logged in, proceed.\r\n").await
         } else {
           connection.send_control_raw(b"530 Not logged in.\r\n").await
@@ -401,6 +387,22 @@ impl Handler for NlstHandler {
   }
 }
 
+pub struct Connection {
+  id: u64,
+  ip: [u8; 4],
+  read_pos: usize,
+  // todo: use this variable in retr ?
+  transfer_type: TransferType,
+  username: String,
+  control_stream: TcpStream,
+  port: u16,
+  data_listener: Option<TcpListener>,
+  dir: String,
+  handlers: HashMap<MethodId, Box<dyn Handler + Send + Sync>>,
+  registerer: fn(&mut Connection),
+  validator: fn(&str, &str) -> bool
+}
+
 impl Connection {
 
   pub fn set_self_ip_addr(&mut self, ip: &String) {
@@ -423,6 +425,10 @@ impl Connection {
 
   pub fn set_validator(&mut self, validator: fn(&str, &str) -> bool) {
     self.validator = validator;
+  }
+
+  pub fn set_registerer(&mut self, registerer: fn(&mut Connection)) {
+    self.registerer = registerer;
   }
 
   pub fn set_dir(&mut self, dir: &String) {
@@ -555,22 +561,14 @@ impl Connection {
       data_listener: Option::None,
       dir: String::from("."),
       handlers: HashMap::new(),
+      registerer: register_all_default_handlers,
       validator: default_validator
     };
 
-    connection.register_handler("CWD", CwdHandler {});
-    connection.register_handler("PWD", PwdHandler {});
-    connection.register_handler("REST", RestHandler {});
-    connection.register_handler("SIZE", SizeHandler {});
-    connection.register_handler("PASV", PasvHandler {});
-    connection.register_handler("EPSV", EpsvHandler {});
     connection.register_handler("USER", UserHandler {});
     connection.register_handler("PASS", PassHandler {});
-    connection.register_handler("RETR", RetrHandler {});
     connection.register_handler("TYPE", TypeHandler {});
     connection.register_handler("QUIT", QuitHandler {});
-    connection.register_handler("LIST", ListHandler {});
-    connection.register_handler("NLST", NlstHandler {});
 
     return connection;
   }
@@ -660,6 +658,18 @@ pub fn start_server(port: u16) -> Receiver<Result<Connection, Error>> {
   });
 
   return rx;
+}
+
+pub fn register_all_default_handlers(connection: &mut Connection) {
+  connection.register_handler("CWD", CwdHandler {});
+  connection.register_handler("PWD", PwdHandler {});
+  connection.register_handler("REST", RestHandler {});
+  connection.register_handler("SIZE", SizeHandler {});
+  connection.register_handler("PASV", PasvHandler {});
+  connection.register_handler("EPSV", EpsvHandler {});
+  connection.register_handler("RETR", RetrHandler {});
+  connection.register_handler("LIST", ListHandler {});
+  connection.register_handler("NLST", NlstHandler {});
 }
 
 fn method_to_int(method: &[u8]) -> MethodId {
@@ -765,6 +775,19 @@ mod tests {
     assert_eq!(args, []);
 
     let command = [C, W, D, ASCII_SPACE, R, T, R, ASCII_CR, ASCII_LF];
+    let (method, args) = super::check_and_get_command(&command);
+
+    assert_eq!(method, 0x00_63_77_64);
+    assert_eq!(args, [R, T, R]);
+
+    let command = [
+      C.to_ascii_uppercase(),
+      W.to_ascii_uppercase(),
+      D.to_ascii_lowercase(),
+      ASCII_SPACE,
+      R, T, R,
+      ASCII_CR, ASCII_LF];
+
     let (method, args) = super::check_and_get_command(&command);
 
     assert_eq!(method, 0x00_63_77_64);

@@ -1,3 +1,5 @@
+use r_ftp::Connection;
+
 #[tokio::main]
 async fn main() {
 
@@ -18,6 +20,7 @@ async fn main() {
         Ok(mut con) => {
           con.set_self_ip_addr(&ip_addr);
           con.set_validator(validator);
+          con.set_registerer(registerer);
           con.set_dir(&dir);
 
           con.start();
@@ -30,6 +33,10 @@ async fn main() {
       println!("None received, error ?");
     }
   }
+}
+
+fn registerer(connection: &mut Connection) {
+  r_ftp::register_all_default_handlers(connection);
 }
 
 fn validator(username: &str, password: &str) -> bool {
