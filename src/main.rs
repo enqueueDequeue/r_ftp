@@ -23,7 +23,7 @@ async fn main() {
           con.set_registerer(registerer);
           con.set_dir(&dir);
 
-          con.start();
+          con.start().await;
         },
         Err(err) => {
           println!("error: {}", err);

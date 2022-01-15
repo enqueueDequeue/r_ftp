@@ -435,22 +435,19 @@ impl Connection {
     self.dir = dir.clone();
   }
 
-  pub fn start(mut self) {
-
+  pub async fn start(mut self) {
     println!("handling connection in dir: {}", self.dir);
 
-    tokio::spawn(async move {
-      match self.handle_connection().await {
-        Err(err) => {
-          println!("error: {}", err);
-        },
-        _ => {
-          println!("success ?");
-        }
-      };
+    match self.handle_connection().await {
+      Err(err) => {
+        println!("error: {}", err);
+      },
+      _ => {
+        println!("success ?");
+      }
+    };
 
-      println!("Connection closed: {}", self.id);
-    });
+    println!("Connection closed: {}", self.id);
   }
 
   pub fn register_handler<T>(&mut self, method: &str, handler: T)
@@ -614,6 +611,7 @@ impl Connection {
   }
 }
 
+#[allow(unused_must_use)]
 pub fn start_server(port: u16) -> Receiver<Result<Connection, Error>> {
 
   let (tx, rx)
