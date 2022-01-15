@@ -438,16 +438,20 @@ impl Connection {
   pub async fn start(mut self) {
     println!("handling connection in dir: {}", self.dir);
 
-    match self.handle_connection().await {
-      Err(err) => {
-        println!("error: {}", err);
-      },
-      _ => {
-        println!("success ?");
-      }
-    };
+    // todo: currently spawning 1/2 thread per connection.
+    //  possible to not spawn any ?
+    tokio::spawn(async move {
+      match self.handle_connection().await {
+        Err(err) => {
+          println!("error: {}", err);
+        },
+        _ => {
+          println!("success ?");
+        }
+      };
 
-    println!("Connection closed: {}", self.id);
+      println!("Connection closed: {}", self.id);
+    });
   }
 
   pub fn register_handler<T>(&mut self, method: &str, handler: T)
